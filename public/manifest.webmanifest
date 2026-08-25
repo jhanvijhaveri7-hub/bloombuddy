@@ -1,0 +1,13 @@
+{
+  "name": "Bloom — Wellbeing Companion",
+  "short_name": "Bloom",
+  "description": "A private space to feel, reflect, and breathe easier.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f5f0",
+  "theme_color": "#476a5a",
+  "icons": [{ "src": "/bloom-logo.png", "sizes": "1254x1254", "type": "image/png", "purpose": "any" }]
+}

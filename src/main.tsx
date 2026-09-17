@@ -165,6 +165,12 @@ async function localApi<T>(path: string, options?: RequestInit): Promise<T> {
   throw new Error("Unsupported local request");
 }
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
+  if (!API && path === "/buddy/reply") {
+    try {
+      const response = await fetch(`/api/v1${path}`, { ...options, headers: { "Content-Type": "application/json", ...(options?.headers || {}) } });
+      if (response.ok) return response.json();
+    } catch { /* Use the private on-device response below when Groq is unavailable. */ }
+  }
   if (!API) return localApi<T>(path, options);
   const response = await fetch(`${API}${path}`, {
     ...options,
@@ -679,6 +685,7 @@ function BloomChat({ setView }: { setView: (v: View) => void }) {
         body: JSON.stringify({
           message: text || "Please respond naturally to this photo.",
           image: sentImage,
+          history: [...msgs.slice(-11).map((item) => ({ role: item.me ? "user" : "assistant", content: item.text })), { role: "user", content: text || "Please respond naturally to this photo." }],
           preferences: activeBloomProfile?.preferences || "",
           avoid: activeBloomProfile?.avoid || "",
         }),

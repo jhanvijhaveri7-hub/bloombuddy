@@ -1,0 +1,17 @@
+.git
+.vercel
+node_modules
+dist
+.env*
+backend
+output
+recovery
+report_assets
+bloom-site
+bloom-site*.tar.gz
+*.docx
+src/assets/space/cosmic-panorama.png
+src/assets/space/earth-horizon-reference.png
+src/assets/space/galaxy-core.gif
+src/assets/space/mars-storm.gif
+src/assets/space/saturn-aurora.gif

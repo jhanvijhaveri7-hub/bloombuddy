@@ -10,3 +10,4 @@ recovery/
 report_assets/
 bloom-site/
 bloom-site*.tar.gz
+.vercel

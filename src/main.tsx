@@ -88,11 +88,64 @@ type View =
 type Memory = { id: number; title?: string; text: string; tag: string; mood?: string; mediaUrl?: string; mediaType?: string; favorite?: boolean; occurredAt?: string; createdAt?: string; date: string };
 type GratitudeItem = { id: number; text: string };
 type BloomProfile = { userId?: string; name: string; preferences: string; avoid?: string };
-const API = import.meta.env.VITE_API_URL || "http://localhost:8080/api/v1";
+const API = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? "http://localhost:8080/api/v1" : "");
 let activeBloomUserId = "";
 let activeBloomProfile: BloomProfile | null = null;
 const userStorageKey = (key: string) => `${key}:${activeBloomUserId || "guest"}`;
+const localCollection = (name: string) => `bloom-local-${name}:${activeBloomUserId || "guest"}`;
+const readLocal = <T,>(name: string, fallback: T): T => {
+  try { return JSON.parse(localStorage.getItem(localCollection(name)) || "") as T; } catch { return fallback; }
+};
+const writeLocal = (name: string, value: unknown) => localStorage.setItem(localCollection(name), JSON.stringify(value));
+async function localApi<T>(path: string, options?: RequestInit): Promise<T> {
+  const method = (options?.method || "GET").toUpperCase();
+  const body = options?.body && typeof options.body === "string" ? JSON.parse(options.body) : {};
+  if (path === "/profile") {
+    if (method === "GET") {
+      const profile = readLocal<BloomProfile | null>("profile", null);
+      if (!profile) throw new Error("Profile not created");
+      return profile as T;
+    }
+    const profile = { ...body, userId: activeBloomUserId } as BloomProfile;
+    writeLocal("profile", profile);
+    return profile as T;
+  }
+  if (path === "/buddy/status") return { aiConnected: false, mode: "limited-fallback" } as T;
+  if (path === "/space/video/status") return { configured: false, provider: "none" } as T;
+  if (path === "/account" && method === "DELETE") {
+    ["profile", "journal", "memories", "goals", "gratitude"].forEach((name) => localStorage.removeItem(localCollection(name)));
+    return undefined as T;
+  }
+  if (path === "/account/restore" && method === "POST") {
+    const restored = typeof body === "object" && body ? body : {};
+    if (restored.profile) writeLocal("profile", restored.profile);
+    for (const name of ["journal", "memories", "goals", "gratitude"] as const) if (Array.isArray(restored[name])) writeLocal(name, restored[name]);
+    return { journal: restored.journal?.length || 0, memories: restored.memories?.length || 0, goals: restored.goals?.length || 0, notes: restored.gratitude?.length || 0 } as T;
+  }
+  const match = path.match(/^\/(journal|memories|goals|gratitude)(?:\/(\d+))?$/);
+  if (!match) throw new Error("This feature needs the Bloom cloud service");
+  const [, name, idText] = match;
+  const items = readLocal<Array<Record<string, unknown>>>(name, []);
+  if (method === "GET") return items as T;
+  if (method === "POST") {
+    const item = { ...body, id: Date.now(), createdAt: new Date().toISOString() };
+    writeLocal(name, [item, ...items]);
+    return item as T;
+  }
+  const id = Number(idText);
+  if (method === "PUT") {
+    const item = { ...items.find((entry) => entry.id === id), ...body, id };
+    writeLocal(name, items.map((entry) => entry.id === id ? item : entry));
+    return item as T;
+  }
+  if (method === "DELETE") {
+    writeLocal(name, items.filter((entry) => entry.id !== id));
+    return undefined as T;
+  }
+  throw new Error("Unsupported local request");
+}
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
+  if (!API) return localApi<T>(path, options);
   const response = await fetch(`${API}${path}`, {
     ...options,
     headers: { "Content-Type": "application/json", "X-Bloom-User-Id": activeBloomUserId, ...(options?.headers || {}) },

@@ -5,3 +5,8 @@ dist/
 .env.backend
 backend/data/
 backend/target/
+output/
+recovery/
+report_assets/
+bloom-site/
+bloom-site*.tar.gz

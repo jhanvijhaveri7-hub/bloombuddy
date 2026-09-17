@@ -1,34 +1,1003 @@
-/* Native mobile safe areas for notches, status bars, and gesture navigation. */
-@supports (padding: env(safe-area-inset-top)) {
-  .app,
-  .welcome,
-  .clerkLogin,
-  .clerkLoading,
-  .clerkSetup {
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-  }
+/* Responsive shell shared by the website and the Capacitor mobile builds. */
+html {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 
+body,
+#root {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  overflow-x: hidden;
+}
+
+img,
+video,
+canvas,
+audio,
+iframe {
+  max-width: 100%;
+}
+
+button,
+input,
+textarea,
+select {
+  min-width: 0;
+}
+
+.app > main,
+.page,
+.card,
+.hero > div,
+.focusRow > div,
+.memoryList article > div,
+.goalList article,
+.timeline article > *,
+.settingsGrid > *,
+.moodRecommendation > *,
+.studioHead > *,
+.albumTracks article > * {
+  min-width: 0;
+}
+
+.page,
+.innerPage {
+  width: 100%;
+}
+
+.navBackdrop {
+  display: none;
+}
+
+@supports (padding: env(safe-area-inset-top)) {
   .side {
+    padding-top: max(22px, env(safe-area-inset-top));
     padding-left: max(20px, env(safe-area-inset-left));
     padding-bottom: max(18px, env(safe-area-inset-bottom));
   }
 
   .spacePage.fullscreen {
     padding-top: env(safe-area-inset-top);
+    padding-right: env(safe-area-inset-right);
     padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+  }
+}
+
+@media (max-width: 760px) {
+  @supports (padding: env(safe-area-inset-top)) {
+    .clerkPanel,
+    .loginWrap,
+    .clerkLoading,
+    .clerkSetup,
+    .profileLoading,
+    .profileOnboarding {
+      padding-top: max(20px, env(safe-area-inset-top));
+      padding-right: max(12px, env(safe-area-inset-right));
+      padding-bottom: max(20px, env(safe-area-inset-bottom));
+      padding-left: max(12px, env(safe-area-inset-left));
+    }
+  }
+}
+
+/* Tablets and small laptops use a slide-out menu so the content keeps its width. */
+@media (max-width: 1024px) {
+  body.nav-open {
+    overflow: hidden;
+  }
+
+  .side {
+    width: min(300px, 88vw);
+    height: 100vh;
+    height: 100dvh;
+    transform: translateX(-105%);
+    visibility: hidden;
+    transition: transform 0.25s ease, visibility 0.25s;
+    box-shadow: none;
+  }
+
+  .side.open {
+    transform: translateX(0);
+    visibility: visible;
+    box-shadow: 14px 0 50px rgba(20, 31, 24, 0.2);
+  }
+
+  .side .mobileClose {
+    display: grid !important;
+  }
+
+  .navBackdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 9;
+    display: block;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: rgba(15, 24, 18, 0.38);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    backdrop-filter: blur(2px);
+    transition: opacity 0.2s ease, visibility 0.2s;
+  }
+
+  .navBackdrop.open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .app > main {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .menu {
+    display: grid;
+    flex: none;
+  }
+
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 8;
+    width: 100%;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+    backdrop-filter: blur(18px);
+  }
+
+  .page {
+    max-width: 100%;
+  }
+
+  .mainGrid,
+  .lower,
+  .entries,
+  .goalList,
+  .insightGrid,
+  .settingsGrid,
+  .usefulInsights {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lower .insight,
+  .settingsGrid section:last-child,
+  .goalEmpty {
+    grid-column: auto;
+  }
+
+  .studioInstrumentWall {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 760px) {
   button,
   .soundCard,
-  .scenePicker button {
+  .scenePicker button,
+  .filter button,
+  .instrumentTabs button {
     min-height: 44px;
   }
 
   input,
-  textarea {
+  textarea,
+  select {
     font-size: 16px;
+  }
+
+  header {
+    min-height: 82px;
+    height: auto;
+    padding: 13px 16px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 11px;
+  }
+
+  header > div:first-of-type {
+    min-width: 0;
+  }
+
+  header small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  header h1 {
+    margin: 4px 0 0;
+    font-size: clamp(18px, 5.7vw, 24px);
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .menu,
+  .headerActions > button {
+    width: 42px;
+    height: 42px;
+  }
+
+  .headerActions {
+    gap: 5px;
+  }
+
+  .page {
+    padding: 14px 16px calc(34px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .pageIntro {
+    width: 100%;
+    margin: 10px 0 22px;
+    gap: 14px;
+  }
+
+  .pageIntro > div,
+  .pageIntro > button,
+  .pageIntro .timelineSearch {
+    width: 100%;
+  }
+
+  .pageIntro .primary {
+    justify-content: center;
+  }
+
+  .pageIntro h2,
+  .hero h2 {
+    font-size: clamp(27px, 8vw, 34px);
+    line-height: 1.14;
+    letter-spacing: -0.7px;
+  }
+
+  .pageIntro p,
+  .hero p {
+    line-height: 1.55;
+  }
+
+  .grid {
+    gap: 13px;
+    margin-top: 13px;
+  }
+
+  .card {
+    padding: 18px;
+    border-radius: 17px;
+  }
+
+  .hero {
+    min-height: 0;
+    padding: 28px 22px 135px;
+    border-radius: 22px;
+  }
+
+  .hero > div:first-child {
+    max-width: 100%;
+  }
+
+  .hero .orb {
+    width: 220px;
+    height: 165px;
+    right: -74px;
+    bottom: -28px;
+  }
+
+  .hero .orb span:nth-child(1) {
+    width: 145px;
+    height: 145px;
+  }
+
+  .hero .orb span:nth-child(2) {
+    width: 76px;
+    height: 76px;
+    right: 108px;
+  }
+
+  .focusRow {
+    gap: 12px;
+  }
+
+  .focus footer,
+  .editor footer,
+  .goalList footer,
+  .cardTitle,
+  .soundControls > div:first-child {
+    align-items: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .rhythm {
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .closing {
+    padding: 21px;
+    border-radius: 18px;
+  }
+
+  .memoryMeta,
+  .growth,
+  .timelineSummary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .memoryMeta div,
+  .growth div,
+  .timelineSummary > div {
+    min-width: 0;
+    padding: 15px 8px;
+  }
+
+  .memoryMeta div:nth-child(2n),
+  .growth div:nth-child(2n),
+  .timelineSummary > div:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .filter,
+  .suggestions,
+  .instrumentTabs,
+  .goalStepControls {
+    width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+  }
+
+  .filter button,
+  .suggestions button,
+  .instrumentTabs button,
+  .goalStepControls button {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  /* Buddy stays usable when the mobile keyboard opens. */
+  .chatPage {
+    height: calc(100vh - 82px);
+    height: calc(100dvh - 82px);
+    min-height: 0;
+    padding-top: 6px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+    overflow: hidden;
+  }
+
+  .chatHead {
+    flex: none;
+    padding-bottom: 12px;
+  }
+
+  .messages {
+    min-height: 0;
+    padding: 16px 2px;
+    overscroll-behavior: contain;
+  }
+
+  .msg {
+    max-width: 92%;
+    padding: 13px 14px;
+    overflow-wrap: anywhere;
+  }
+
+  .suggestions {
+    flex: none;
+    margin-bottom: 7px;
+  }
+
+  .composer {
+    flex: none;
+    width: 100%;
+    align-items: center;
+    padding: 6px;
+  }
+
+  .composer textarea {
+    min-height: 42px;
+    max-height: 110px;
+  }
+
+  .chatImage,
+  .chatMediaPreview img,
+  .chatMediaPreview video {
+    width: 100%;
+    height: auto;
+  }
+
+  .pendingMedia,
+  .savedMedia {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pendingMedia img,
+  .pendingMedia video,
+  .savedMedia img,
+  .savedMedia video {
+    height: auto;
+    max-height: 240px;
+  }
+
+  .editor,
+  .memoryEditor,
+  .goalEditor {
+    padding: 18px;
+  }
+
+  .editor textarea {
+    min-height: 180px;
+    height: min(42vh, 280px);
+  }
+
+  .journalTools,
+  .memoryEditorActions {
+    align-items: stretch;
+  }
+
+  .journalTools button,
+  .memoryEditorActions button {
+    justify-content: center;
+  }
+
+  .memoryFields,
+  .goalFields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .memoryFields label:first-child,
+  .goalFields label:first-child {
+    grid-column: auto;
+  }
+
+  .memoryList article {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .memoryActions {
+    grid-column: 2;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+
+  .attachmentPreview {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .attachmentPreview img,
+  .attachmentPreview video,
+  .attachmentPreview audio {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .goalEditorActions,
+  .dailyGoal,
+  .makeMusicBanner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .goalEditorActions button,
+  .dailyGoal button,
+  .makeMusicBanner .primary {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .timeline {
+    margin-left: 8px;
+    padding-left: 19px;
+  }
+
+  .timeline .year {
+    margin-left: -27px;
+  }
+
+  .timeline article {
+    gap: 8px;
+  }
+
+  .timeline .dot {
+    left: -24px;
+  }
+
+  .timelineEmpty {
+    margin-left: -19px;
+  }
+
+  .timelineMedia,
+  .timelineAudio,
+  .memoryMedia,
+  .memoryAudio {
+    width: 100%;
+  }
+
+  .paletteChoices,
+  .insightSummary,
+  .insightsExplain {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settingRow {
+    gap: 14px;
+  }
+
+  .settingRow > div {
+    min-width: 0;
+  }
+
+  /* Music and instruments keep full controls without widening the page. */
+  .moodRecommendation {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 22px;
+    padding: 20px;
+    border-radius: 20px;
+  }
+
+  .moodRecommendation h3,
+  .makeMusicBanner h3 {
+    font-size: clamp(23px, 7vw, 29px);
+  }
+
+  .bloomPlayer,
+  .instrumentStudio,
+  .myAlbum {
+    width: 100%;
+    padding: 16px;
+    border-radius: 17px;
+  }
+
+  .studioHead,
+  .studioControls,
+  .bindingHelp {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .studioInstrumentWall {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .studioInstrumentWall button {
+    padding: 13px 6px;
+  }
+
+  .pianoKeyboard {
+    width: 100%;
+    max-width: 100%;
+    height: 205px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-inline: contain;
+    touch-action: pan-x;
+    scrollbar-width: thin;
+  }
+
+  .guitarBody {
+    width: 100%;
+    padding: 22px 14px;
+    border-radius: 36px 17px 17px 36px;
+  }
+
+  .guitarBody button {
+    width: 100%;
+  }
+
+  .drumKit {
+    width: 100%;
+    max-width: 100%;
+    padding: 16px 10px;
+    border-radius: 22px;
+    overflow: hidden;
+  }
+
+  .drumKitTop,
+  .drumKitBottom {
+    max-width: 100%;
+    gap: 7px;
+  }
+
+  .noteBoard {
+    width: 100%;
+    max-width: 100%;
+    padding: 17px 12px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+  }
+
+  .synthBoard {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  .albumHead {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .albumTracks article {
+    grid-template-columns: 24px minmax(0, 1fr) 34px;
+  }
+
+  .albumTracks audio {
+    grid-column: 1 / -1;
+  }
+
+  .albumTracks a {
+    grid-column: 2;
+  }
+
+  /* Games resize to the available screen instead of using fixed grids. */
+  .gameTabs {
+    display: flex;
+    width: 100%;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 5px;
+    scrollbar-width: thin;
+  }
+
+  .gameTabs button,
+  .gameTabs button:last-child {
+    grid-column: auto;
+    flex: 0 0 136px;
+  }
+
+  .gameStage {
+    min-height: 0;
+    padding: 17px 12px;
+    overflow: hidden;
+  }
+
+  .coloringGame {
+    padding: 8px 12px;
+    border-radius: 20px;
+  }
+
+  .paintPalette {
+    max-width: 100%;
+  }
+
+  .bubbleGarden {
+    width: min(100%, 300px);
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 7px;
+    padding: 14px;
+  }
+
+  .bubbleGarden button {
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    aspect-ratio: 1;
+  }
+
+  .zenSand {
+    border-width: 7px;
+    border-radius: 18px;
+  }
+
+  .zenSand canvas {
+    height: min(55vh, 340px);
+    min-height: 250px;
+  }
+
+  .sandControls .softButton {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .memoryTiles,
+  .memoryTiles.cards-12 {
+    width: min(100%, 310px);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .memoryTiles button,
+  .memoryTiles.cards-12 button {
+    width: 100%;
+    height: auto;
+    min-height: 58px;
+    aspect-ratio: 1;
+  }
+
+  .calmMosaic,
+  .calmMosaic.tiles-50 {
+    width: min(100%, 330px);
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    padding: 10px;
+  }
+
+  .calmMosaic button,
+  .calmMosaic.tiles-50 button {
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    aspect-ratio: 1;
+  }
+
+  /* Immersive pages use the usable mobile viewport and safe areas. */
+  .interactiveSpace {
+    height: calc(100vh - 150px);
+    height: calc(100dvh - 150px);
+    min-height: 430px;
+    max-height: 720px;
+    border-radius: 20px;
+  }
+
+  .spaceGuide {
+    bottom: 14px;
+    width: calc(100% - 28px);
+    max-width: 270px;
+    white-space: normal;
+  }
+
+  .interactiveSpacePage .visionLoop {
+    top: 14px;
+    left: 14px;
+    max-width: 130px;
+  }
+
+  .fullBtn {
+    top: 13px;
+    right: 13px;
+  }
+
+  .interactiveSpacePage.fullscreen .interactiveSpace {
+    height: 100%;
+    min-height: 100%;
+  }
+
+  .zenWorld {
+    height: calc(100vh - 130px);
+    height: calc(100dvh - 130px);
+    min-height: 500px;
+    max-height: 690px;
+    border-radius: 22px;
+  }
+
+  .zenContent {
+    padding: 22px;
+  }
+
+  .zenContent h2 {
+    font-size: clamp(29px, 9vw, 38px);
+  }
+
+  .zenDetails {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 11px;
+  }
+
+  .breathStage,
+  .groundingCard {
+    max-width: 100%;
+  }
+
+  .breathNotes {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .groundNumber {
+    font-size: clamp(52px, 18vw, 92px);
+  }
+
+  .meditationGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .meditationChoices {
+    display: flex;
+    width: 100%;
+    gap: 8px;
+    padding: 10px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .meditationChoiceHead {
+    display: none;
+  }
+
+  .meditationChoices > button {
+    flex: 0 0 158px;
+    min-height: 68px;
+  }
+
+  .meditationSession {
+    padding: 20px 16px;
+  }
+
+  .meditationSessionHead {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .meditationOrb {
+    width: min(270px, 78vw);
+  }
+
+  .meditationGuide {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .meditationGuide > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .meditationGuide > div:last-child {
+    border-bottom: 0;
+  }
+
+  .profileOnboardingCard {
+    padding: 24px 18px;
+    border-radius: 22px;
+  }
+
+  .profileOnboardingCard h1 {
+    font-size: clamp(27px, 8vw, 34px);
+  }
+}
+
+@media (max-width: 390px) {
+  header {
+    padding-right: 11px;
+    padding-left: 11px;
+    gap: 8px;
+  }
+
+  header small {
+    font-size: 8px;
+    letter-spacing: 0.8px;
+  }
+
+  .headerActions > button {
+    display: none;
+  }
+
+  .page {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .card {
+    padding: 16px;
+  }
+
+  .memoryMeta,
+  .growth,
+  .timelineSummary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .memoryMeta div,
+  .growth div,
+  .timelineSummary > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .memoryMeta div:last-child,
+  .growth div:last-child,
+  .timelineSummary > div:last-child {
+    border-bottom: 0;
+  }
+
+  .drumPad,
+  .drumPad.tom,
+  .drumPad.hihat {
+    width: 70px;
+    height: 70px;
+    border-width: 4px;
+    font-size: 9px;
+  }
+
+  .drumPad.kick {
+    width: 86px;
+    height: 86px;
+  }
+
+  .drumPad kbd {
+    font-size: 8px;
+  }
+
+  .guitarChords button {
+    width: 52px;
+    height: 52px;
+  }
+
+  .zenDetails {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .meditationActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .meditationActions button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .meditationDifference {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-height: 560px) and (orientation: landscape) {
+  header {
+    position: relative;
+    min-height: 68px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .chatPage {
+    height: calc(100dvh - 68px);
+  }
+
+  .interactiveSpace,
+  .zenWorld {
+    height: 78vh;
+    min-height: 350px;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .soundCard:hover,
+  .memoryTiles button:not(:disabled):hover,
+  .calmMosaic button:hover,
+  .coloringGame svg [fill]:hover {
+    transform: none;
+    filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .side,
+  .navBackdrop,
+  .meditationOrb,
+  .heroOrb,
+  .heroOrb * {
+    transition: none;
+    animation: none !important;
+  }
+}
+
+@media (max-width: 700px) {
+  .hero .heroOrb {
+    width: 260px;
+    height: 195px;
+    right: -34px;
+    bottom: -27px;
+    transform: scale(.76);
+    transform-origin: center;
+  }
+}
+
+@media (max-width: 390px) {
+  .hero .heroOrb {
+    right: -62px;
+    bottom: -31px;
+    transform: scale(.68);
   }
 }

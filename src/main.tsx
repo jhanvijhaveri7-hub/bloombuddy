@@ -1,5 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import * as THREE from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import {
   ClerkProvider,
   SignIn,
@@ -60,9 +64,7 @@ import {
 import "./styles.css";
 import "./auth.css";
 import "./mobile.css";
-import auroraImage from "./assets/space/northern-lights.png";
-import marsImage from "./assets/space/mars.png";
-import galaxyImage from "./assets/space/galaxy.png";
+import cosmicEarthPanorama from "./assets/space/cosmic-earth-panorama-v2.png";
 
 type View =
   | "Today"
@@ -75,6 +77,7 @@ type View =
   | "Goals"
   | "Timeline"
   | "Sounds"
+  | "Meditation"
   | "Mindful Breaks"
   | "Breathe"
   | "Space"
@@ -84,11 +87,15 @@ type View =
   | "Settings";
 type Memory = { id: number; title?: string; text: string; tag: string; mood?: string; mediaUrl?: string; mediaType?: string; favorite?: boolean; occurredAt?: string; createdAt?: string; date: string };
 type GratitudeItem = { id: number; text: string };
+type BloomProfile = { userId?: string; name: string; preferences: string; avoid?: string };
 const API = import.meta.env.VITE_API_URL || "http://localhost:8080/api/v1";
+let activeBloomUserId = "";
+let activeBloomProfile: BloomProfile | null = null;
+const userStorageKey = (key: string) => `${key}:${activeBloomUserId || "guest"}`;
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API}${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers: { "Content-Type": "application/json", "X-Bloom-User-Id": activeBloomUserId, ...(options?.headers || {}) },
   });
   if (!response.ok) throw new Error(`Bloom API error: ${response.status}`);
   return response.status === 204 ? (undefined as T) : response.json();
@@ -128,6 +135,7 @@ const nav = [
   ["Goals", Target],
   ["Timeline", Clock3],
   ["Sounds", Waves],
+  ["Meditation", Moon],
   ["Mindful Breaks", CircleDot],
   ["Space", Orbit],
   ["Zen Place", Flower2],
@@ -146,17 +154,19 @@ function Sidebar({
   setView,
   open,
   setOpen,
+  profileName,
 }: {
   view: View;
   setView: (v: View) => void;
   open: boolean;
   setOpen: (x: boolean) => void;
+  profileName: string;
 }) {
   const { signOut } = useClerk();
   const { user } = useUser();
   const [accountOpen, setAccountOpen] = useState(false);
   const accountMenu = useRef<HTMLDivElement | null>(null);
-  const accountName = user?.firstName || user?.fullName || "Jhanvi";
+  const accountName = profileName || user?.firstName || user?.fullName || "Bloom user";
   const accountInitials = user?.firstName && user?.lastName ? `${user.firstName[0]}${user.lastName[0]}` : accountName.slice(0, 2).toUpperCase();
   useEffect(() => {
     const closeAccountMenu = (event: MouseEvent) => {
@@ -220,10 +230,12 @@ function Header({
   view,
   onMenu,
   setView,
+  name,
 }: {
   view: View;
   onMenu: () => void;
   setView: (v: View) => void;
+  name: string;
 }) {
   const now = new Date();
   const greeting =
@@ -231,7 +243,7 @@ function Header({
       ? "Good morning"
       : now.getHours() < 18
         ? "Good afternoon"
-        : "Good evening";
+        : "Good night";
   const search = () => {
     const q = window
       .prompt(
@@ -257,7 +269,7 @@ function Header({
             })
             .toUpperCase()}
         </small>
-        <h1>{view === "Today" ? `${greeting}, Jhanvi.` : view}</h1>
+        <h1>{view === "Today" ? `${greeting}, ${name}.` : view}</h1>
       </div>
       <div className="headerActions">
         <button aria-label="Search features" onClick={search}>
@@ -326,10 +338,24 @@ function Today({ setView }: { setView: (v: View) => void }) {
             Talk it through <ArrowUpRight />
           </button>
         </div>
-        <div className="orb">
-          <span />
-          <span />
-          <span />
+        <div className="orb heroOrb" aria-hidden="true">
+          <div className="orbAtmosphere" />
+          <div className="orbCore">
+            <div className="orbCoreLight" />
+            <div className="orbCoreGrid" />
+          </div>
+          <div className="orbitalPlane orbitOne">
+            <i className="orbSatellite satelliteGold" />
+          </div>
+          <div className="orbitalPlane orbitTwo">
+            <i className="orbSatellite satellitePearl" />
+          </div>
+          <div className="orbitalPlane orbitThree">
+            <i className="orbSatellite satelliteMint" />
+          </div>
+          <i className="orbParticle particleOne" />
+          <i className="orbParticle particleTwo" />
+          <i className="orbParticle particleThree" />
         </div>
       </section>
       <div className="grid mainGrid">
@@ -481,15 +507,17 @@ function Today({ setView }: { setView: (v: View) => void }) {
 }
 
 function BloomChat({ setView }: { setView: (v: View) => void }) {
+  const { user } = useUser();
+  const buddyName = activeBloomProfile?.name || user?.firstName || "there";
   type Msg = { me: boolean; text: string; image?: string; audio?: string; createdAt?: string };
   const welcomeMessage: Msg = {
     me: false,
-    text: "Hey Jhanvi, I’m Buddy. I’m here to listen like a steady friend. What would feel most helpful right now?",
+    text: `Hey ${buddyName}, I’m Buddy. I’m here to listen like a steady friend. What would feel most helpful right now?`,
     createdAt: new Date().toISOString(),
   };
   const [msgs, setMsgs] = useState<Msg[]>(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem("bloom-buddy-chat") || "[]");
+      const saved = JSON.parse(localStorage.getItem(userStorageKey("bloom-buddy-chat")) || "[]");
       return Array.isArray(saved) && saved.length ? saved : [welcomeMessage];
     } catch { return [welcomeMessage]; }
   });
@@ -510,10 +538,10 @@ function BloomChat({ setView }: { setView: (v: View) => void }) {
         createdAt: createdAt || new Date().toISOString(),
         ...(image && image.length < 350_000 ? { image } : {}),
       }));
-      localStorage.setItem("bloom-buddy-chat", JSON.stringify(persistentMessages));
+      localStorage.setItem(userStorageKey("bloom-buddy-chat"), JSON.stringify(persistentMessages));
     } catch {
       try {
-        localStorage.setItem("bloom-buddy-chat", JSON.stringify(msgs.slice(-120).map(({ me, text, createdAt }) => ({ me, text, createdAt }))));
+        localStorage.setItem(userStorageKey("bloom-buddy-chat"), JSON.stringify(msgs.slice(-120).map(({ me, text, createdAt }) => ({ me, text, createdAt }))));
       } catch { /* Storage may be disabled; the current session still works. */ }
     }
   }, [msgs]);
@@ -545,13 +573,13 @@ function BloomChat({ setView }: { setView: (v: View) => void }) {
               ? "tired"
               : null;
     if (detectedMood) {
-      localStorage.setItem("bloom-mood", detectedMood);
+      localStorage.setItem(userStorageKey("bloom-mood"), detectedMood);
       window.dispatchEvent(new CustomEvent("bloom-mood", { detail: detectedMood }));
     }
     const placePreference = text.match(/(?:my\s+)?favou?rite\s+(?:place|view|scene)\s+(?:is|would be)\s+(.+)/i);
     if (placePreference?.[1]) {
       const preference = placePreference[1].trim().replace(/[.!?]+$/, "");
-      localStorage.setItem("bloom-favorite-place", preference);
+      localStorage.setItem(userStorageKey("bloom-favorite-place"), preference);
       void api<Memory>("/memories", {
         method: "POST",
         body: JSON.stringify({ title: "Favorite place", text: preference, tag: "Preference", mood: "Calm", occurredAt: new Date().toISOString() }),
@@ -578,6 +606,8 @@ function BloomChat({ setView }: { setView: (v: View) => void }) {
         body: JSON.stringify({
           message: text || "Please respond naturally to this photo.",
           image: sentImage,
+          preferences: activeBloomProfile?.preferences || "",
+          avoid: activeBloomProfile?.avoid || "",
         }),
       });
       setMsgs((current) => [...current, { me: false, text: result.reply, createdAt: new Date().toISOString() }]);
@@ -1047,7 +1077,7 @@ function Journal() {
   );
 }
 function Memories() {
-  const [mems, setMems] = useState(memoriesSeed);
+  const [mems, setMems] = useState<Memory[]>([]);
   const [filter, setFilter] = useState("All memories");
   const [editing, setEditing] = useState<Memory | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -1198,7 +1228,7 @@ function InstrumentStudio({ albumMode = false }: { albumMode?: boolean }) {
   const [bindingTarget, setBindingTarget] = useState<string | null>(null);
   const [bindings, setBindings] = useState<Record<Instrument, Record<string, string>>>(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem("bloom-instrument-bindings") || "null");
+      const saved = JSON.parse(localStorage.getItem(userStorageKey("bloom-instrument-bindings")) || "null");
       return saved ? Object.fromEntries(Object.entries(defaultBindings).map(([name, values]) => [name, { ...values, ...(saved[name] || {}) }])) as Record<Instrument, Record<string, string>> : defaultBindings;
     } catch { return defaultBindings; }
   });
@@ -1208,7 +1238,7 @@ function InstrumentStudio({ albumMode = false }: { albumMode?: boolean }) {
   const [recordingDataUrl, setRecordingDataUrl] = useState("");
   const [trackName, setTrackName] = useState("");
   const [album, setAlbum] = useState<{ id: string; title: string; instrument: string; audio: string; createdAt: string }[]>(() => {
-    try { return JSON.parse(localStorage.getItem("bloom-music-album") || "[]"); } catch { return []; }
+    try { return JSON.parse(localStorage.getItem(userStorageKey("bloom-music-album")) || "[]"); } catch { return []; }
   });
   const audioContext = useRef<AudioContext | null>(null);
   const recordingDestination = useRef<MediaStreamAudioDestinationNode | null>(null);
@@ -1357,7 +1387,7 @@ function InstrumentStudio({ albumMode = false }: { albumMode?: boolean }) {
     if (recordingTimer.current) window.clearInterval(recordingTimer.current);
   }, []);
   useEffect(() => {
-    try { localStorage.setItem("bloom-music-album", JSON.stringify(album)); }
+    try { localStorage.setItem(userStorageKey("bloom-music-album"), JSON.stringify(album)); }
     catch { setSoundStatus("Your browser album is full. Download a track, then remove older recordings before saving more."); }
   }, [album]);
   const saveToAlbum = () => {
@@ -1463,7 +1493,7 @@ function InstrumentStudio({ albumMode = false }: { albumMode?: boolean }) {
     }
   };
   useEffect(() => {
-    localStorage.setItem("bloom-instrument-bindings", JSON.stringify(bindings));
+    localStorage.setItem(userStorageKey("bloom-instrument-bindings"), JSON.stringify(bindings));
   }, [bindings]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1555,7 +1585,7 @@ function MoodMusic({ setView }: { setView: (v: View) => void }) {
     focus: { label: "Focus", title: "Settle into one thing", reason: "Steady background music that can make starting feel less noisy.", playlist: "37i9dQZF1DX8NTLI2TtZa6", color: "#e3e8d8", examples: ["Low-distraction focus tracks", "Steady electronic background music", "Instrumental concentration music"] },
   };
   const modeForMood = (value: string | null): Mode => value === "happy" ? "party" : value === "tired" ? "sleep" : value === "sad" ? "soothing" : value === "anxious" || value === "annoyed" ? "peaceful" : "soothing";
-  const [mode, setMode] = useState<Mode>(() => modeForMood(localStorage.getItem("bloom-mood")));
+  const [mode, setMode] = useState<Mode>(() => modeForMood(localStorage.getItem(userStorageKey("bloom-mood"))));
   const library: Record<Mode, { title: string; artist: string; url: string }[]> = {
     soothing: [1, 3, 5].map((n, i) => ({ title: ["Soft Landing", "A Little Lighter", "Stay Awhile"][i], artist: "SoundHelix", url: `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-${n}.mp3` })),
     romantic: [2, 8, 10].map((n, i) => ({ title: ["Warm Evening", "Close to You", "Slow Dancing Lights"][i], artist: "SoundHelix", url: `https://www.soundhelix.com/examples/mp3/SoundHelix-Song-${n}.mp3` })),
@@ -2337,155 +2367,657 @@ function Breathe() {
     </div>
   );
 }
-function Space() {
-  const [scene, setScene] = useState(0);
-  const [full, setFull] = useState(false);
-  const [visionPrompt, setVisionPrompt] = useState("");
-  const [customVision, setCustomVision] = useState("");
-  const [placeSuggestions, setPlaceSuggestions] = useState<string[]>([]);
-  const [visionMessage, setVisionMessage] = useState("Tell me about a place and I’ll shape a calming 1:30 loop for you.");
-  const [generatedVideo, setGeneratedVideo] = useState("");
-  const [videoState, setVideoState] = useState<"idle" | "generating" | "ready" | "failed">("idle");
-  const scenes = [
-    {
-      name: "Northern Lights",
-      detail: "Stand beneath a living sky",
-      image: auroraImage,
-    },
-    {
-      name: "Mars at dusk",
-      detail: "A quiet walk on another world",
-      image: marsImage,
-    },
-    {
-      name: "Deep galaxy",
-      detail: "Float among distant stars",
-      image: galaxyImage,
-    },
-  ];
-  const chooseSceneFor = (description: string) => {
-    const words = description.toLowerCase();
-    if (/mars|desert|dune|sunset|red|canyon|mountain|warm/.test(words)) return 1;
-    if (/galaxy|space|star|moon|cosmic|night|universe|dark/.test(words)) return 2;
-    return 0;
+
+type MeditationPhase = {
+  label: string;
+  cue: string;
+  seconds: number;
+  kind: "inhale" | "exhale" | "chant" | "rest";
+};
+
+const meditationPractices: Array<{
+  id: string;
+  title: string;
+  tradition: string;
+  phrase: string;
+  meaning: string;
+  note: string;
+  focus: string;
+  method: string;
+  symbol: string;
+  sound: "omVoice" | "soHum" | "kirtan" | "arabic" | "bells" | "bowl" | "nature";
+  soundLabel: string;
+  colors: [string, string];
+  tone: number;
+  phases: MeditationPhase[];
+}> = [
+  {
+    id: "om",
+    title: "Om meditation",
+    tradition: "Dharmic traditions",
+    phrase: "A - U - M",
+    meaning: "Let the sound move gently from the chest to the lips, then rest in silence.",
+    note: "Chant in your natural voice. It should feel comfortable, never forced.",
+    focus: "Voice and vibration",
+    method: "One long A-U-M followed by silence",
+    symbol: "ॐ",
+    sound: "omVoice",
+    soundLabel: "Ommmm voice",
+    colors: ["#d7e7dc", "#e9dfef"],
+    tone: 110,
+    phases: [
+      { label: "Breathe in", cue: "Inhale slowly through your nose", seconds: 4, kind: "inhale" },
+      { label: "Chant Om", cue: "Release one long, comfortable A-U-M", seconds: 7, kind: "chant" },
+      { label: "Rest", cue: "Notice the quiet after the sound", seconds: 3, kind: "rest" },
+    ],
+  },
+  {
+    id: "soham",
+    title: "So Hum breathing",
+    tradition: "Yogic meditation",
+    phrase: "So · Hum",
+    meaning: "Silently think “So” while breathing in and “Hum” while breathing out.",
+    note: "Pronounced approximately “so-hum”. Keep your breath easy and unstrained.",
+    focus: "Breath and silent mantra",
+    method: "So on the inhale, Hum on the exhale",
+    symbol: "SO HUM",
+    sound: "soHum",
+    soundLabel: "So · Hmmmm voice",
+    colors: ["#d8e9e5", "#dce5f2"],
+    tone: 123,
+    phases: [
+      { label: "So", cue: "Breathe in and silently think “So”", seconds: 4, kind: "inhale" },
+      { label: "Hum", cue: "Breathe out and silently think “Hum”", seconds: 6, kind: "exhale" },
+    ],
+  },
+  {
+    id: "waheguru",
+    title: "Waheguru simran",
+    tradition: "Sikh remembrance",
+    phrase: "Waheguru",
+    meaning: "Repeat Waheguru gently and bring your attention back whenever it wanders.",
+    note: "You may repeat it aloud or silently, with respect and without rushing.",
+    focus: "Remembrance and repetition",
+    method: "Repeat one sacred word at your pace",
+    symbol: "ਵਾਹਿਗੁਰੂ",
+    sound: "kirtan",
+    soundLabel: "Kirtan instruments",
+    colors: ["#f0e3c9", "#dbe8e4"],
+    tone: 130,
+    phases: [
+      { label: "Settle", cue: "Take one calm, natural breath", seconds: 4, kind: "inhale" },
+      { label: "Remember", cue: "Repeat “Waheguru” at your own pace", seconds: 8, kind: "chant" },
+      { label: "Pause", cue: "Rest briefly and begin again", seconds: 2, kind: "rest" },
+    ],
+  },
+  {
+    id: "dhikr",
+    title: "Quiet dhikr",
+    tradition: "Islamic remembrance",
+    phrase: "SubhanAllah",
+    meaning: "Repeat “SubhanAllah” quietly while keeping a natural, unforced breath.",
+    note: "The phrase means “Glory be to God”. Follow the practice in the way your tradition teaches you.",
+    focus: "Remembrance and praise",
+    method: "Natural breathing with gentle repetition",
+    symbol: "ذِكْر",
+    sound: "arabic",
+    soundLabel: "Oud and frame drum",
+    colors: ["#dce9df", "#d8e5ed"],
+    tone: 117,
+    phases: [
+      { label: "Breathe", cue: "Settle into a comfortable natural breath", seconds: 4, kind: "inhale" },
+      { label: "Remember", cue: "Repeat “SubhanAllah” gently", seconds: 8, kind: "chant" },
+      { label: "Pause", cue: "Return attention to the heart", seconds: 2, kind: "rest" },
+    ],
+  },
+  {
+    id: "christian",
+    title: "Contemplative prayer",
+    tradition: "Christian practice",
+    phrase: "Be still · remain present",
+    meaning: "Rest quietly in God’s presence, returning to a short prayer when distracted.",
+    note: "Use a familiar prayer from your own faith community if you prefer.",
+    focus: "Prayerful presence",
+    method: "A short prayer followed by quiet rest",
+    symbol: "✝",
+    sound: "bells",
+    soundLabel: "Distant bells",
+    colors: ["#e4e8ef", "#eee2d5"],
+    tone: 132,
+    phases: [
+      { label: "Receive", cue: "Breathe in slowly and become still", seconds: 4, kind: "inhale" },
+      { label: "Release", cue: "Breathe out and repeat your short prayer", seconds: 6, kind: "exhale" },
+      { label: "Rest", cue: "Remain quietly present", seconds: 4, kind: "rest" },
+    ],
+  },
+  {
+    id: "metta",
+    title: "Loving-kindness",
+    tradition: "Buddhist meditation",
+    phrase: "May I be safe · May I be peaceful",
+    meaning: "Offer a kind wish to yourself, then extend it to someone else when ready.",
+    note: "There is no need to create a special feeling. Simply return to the intention of kindness.",
+    focus: "Compassion and goodwill",
+    method: "Repeat kind wishes for self and others",
+    symbol: "METTA",
+    sound: "bowl",
+    soundLabel: "Singing bowl",
+    colors: ["#eadfea", "#e8ead9"],
+    tone: 126,
+    phases: [
+      { label: "Breathe", cue: "Take one gentle breath", seconds: 4, kind: "inhale" },
+      { label: "Offer kindness", cue: "Repeat the words slowly to yourself", seconds: 8, kind: "chant" },
+      { label: "Receive", cue: "Let the words settle without pressure", seconds: 3, kind: "rest" },
+    ],
+  },
+  {
+    id: "silent",
+    title: "Silent stillness",
+    tradition: "Non-religious",
+    phrase: "Notice · allow · return",
+    meaning: "Notice one breath at a time and return gently whenever the mind wanders.",
+    note: "No mantra or belief is required. Keep your eyes open if that feels safer.",
+    focus: "Open awareness",
+    method: "Observe without chanting or prayer",
+    symbol: "○",
+    sound: "nature",
+    soundLabel: "Natural ambience",
+    colors: ["#dfe9e3", "#ece9df"],
+    tone: 105,
+    phases: [
+      { label: "Notice", cue: "Feel the breath arrive", seconds: 4, kind: "inhale" },
+      { label: "Allow", cue: "Let thoughts pass without following them", seconds: 6, kind: "rest" },
+      { label: "Return", cue: "Come back gently to the next breath", seconds: 4, kind: "exhale" },
+    ],
+  },
+];
+
+function Meditation() {
+  const [practiceId, setPracticeId] = useState("om");
+  const [minutes, setMinutes] = useState(5);
+  const [remaining, setRemaining] = useState(5 * 60);
+  const [running, setRunning] = useState(false);
+  const [soundOn, setSoundOn] = useState(true);
+  const audio = useRef<{ context: AudioContext; master: GainNode; timers: number[] } | null>(null);
+  const practice = meditationPractices.find((item) => item.id === practiceId) || meditationPractices[0];
+  const totalSeconds = minutes * 60;
+  const elapsed = Math.max(0, totalSeconds - remaining);
+  const cycleLength = practice.phases.reduce((sum, item) => sum + item.seconds, 0);
+  const cycleSecond = elapsed % cycleLength;
+  let phasePosition = 0;
+  const phase = practice.phases.find((item) => {
+    phasePosition += item.seconds;
+    return cycleSecond < phasePosition;
+  }) || practice.phases[0];
+  const progress = totalSeconds ? Math.min(100, (elapsed / totalSeconds) * 100) : 0;
+  const timeLabel = `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`;
+
+  const stopTone = () => {
+    const current = audio.current;
+    if (!current) return;
+    const now = current.context.currentTime;
+    current.timers.forEach((timer) => window.clearInterval(timer));
+    current.master.gain.cancelScheduledValues(now);
+    current.master.gain.setValueAtTime(Math.max(current.master.gain.value, 0.0001), now);
+    current.master.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+    window.setTimeout(() => void current.context.close(), 550);
+    audio.current = null;
   };
-  const rememberPlace = async (description: string) => {
-    localStorage.setItem("bloom-favorite-place", description);
-    try {
-      await api<Memory>("/memories", {
-        method: "POST",
-        body: JSON.stringify({ title: "My calming vision", text: description, tag: "Preference", mood: "Calm", occurredAt: new Date().toISOString() }),
+
+  const startTone = () => {
+    stopTone();
+    const AudioCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtor) return;
+    const context = new AudioCtor();
+    void context.resume();
+    const master = context.createGain();
+    const compressor = context.createDynamicsCompressor();
+    const timers: number[] = [];
+    master.gain.setValueAtTime(0.0001, context.currentTime);
+    master.gain.exponentialRampToValueAtTime(0.68, context.currentTime + 0.9);
+    compressor.threshold.value = -18;
+    compressor.knee.value = 16;
+    compressor.ratio.value = 4;
+    compressor.attack.value = 0.01;
+    compressor.release.value = 0.35;
+    master.connect(compressor);
+    compressor.connect(context.destination);
+
+    const playResonance = (
+      base: number,
+      ratios: number[],
+      duration: number,
+      volume: number,
+      type: OscillatorType = "sine",
+      attack = 0.2,
+    ) => {
+      const now = context.currentTime;
+      ratios.forEach((ratio, index) => {
+        const oscillator = context.createOscillator();
+        const envelope = context.createGain();
+        oscillator.type = type;
+        oscillator.frequency.setValueAtTime(base * ratio, now);
+        oscillator.detune.value = index % 2 ? -5 : 3;
+        envelope.gain.setValueAtTime(0.0001, now);
+        envelope.gain.exponentialRampToValueAtTime(volume / Math.max(1, index + 1), now + Math.min(attack, duration / 4));
+        envelope.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+        oscillator.connect(envelope);
+        envelope.connect(master);
+        oscillator.start(now);
+        oscillator.stop(now + duration + 0.05);
       });
-    } catch {
-      // The local preference still keeps the experience available offline.
-    }
-  };
-  const createVision = async (descriptionOverride?: string) => {
-    const description = (descriptionOverride ?? visionPrompt).trim();
-    if (!description) return;
-    setScene(chooseSceneFor(description));
-    setCustomVision(description);
-    setGeneratedVideo("");
-    setVideoState("generating");
-    setVisionPrompt("");
-    setVisionMessage("Veo is creating your place. This can take a few minutes—you may keep exploring Bloom.");
-    setPlaceSuggestions((current) => [description, ...current.filter((item) => item !== description)].slice(0, 4));
-    await rememberPlace(description);
-    try {
-      const job = await api<{ id: string }>("/space/video", { method: "POST", body: JSON.stringify({ prompt: description }) });
-      for (let attempt = 0; attempt < 120; attempt += 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, 5000));
-        const current = await api<{ status: string; error?: string }>(`/space/video/${job.id}`);
-        if (current.status === "ready") {
-          setGeneratedVideo(`${API}/space/video/${job.id}/content`);
-          setVideoState("ready");
-          setVisionMessage("Your AI video is ready. It will keep looping through the 1:30 calming session.");
-          return;
-        }
-        if (current.status === "failed") throw new Error(current.error || "Video generation failed");
+    };
+
+    const createNoise = (seconds: number, brown = false) => {
+      const frames = Math.floor(context.sampleRate * seconds);
+      const buffer = context.createBuffer(1, frames, context.sampleRate);
+      const data = buffer.getChannelData(0);
+      let smooth = 0;
+      for (let index = 0; index < frames; index += 1) {
+        const white = Math.random() * 2 - 1;
+        smooth = smooth * (brown ? 0.985 : 0.9) + white * (brown ? 0.015 : 0.1);
+        data[index] = brown ? smooth * 3.2 : smooth;
       }
-      throw new Error("Video generation is taking longer than expected.");
-    } catch (error) {
-      setVideoState("failed");
-      setVisionMessage(error instanceof Error && error.message.includes("503") ? "Add GEMINI_API_KEY to the backend to enable real AI video. Your animated preview is still ready." : "The AI video could not be created, so your animated preview is playing instead. Please try again.");
+      return buffer;
+    };
+
+    const playBreath = (duration = 3.5) => {
+      const source = context.createBufferSource();
+      const filter = context.createBiquadFilter();
+      const breathGain = context.createGain();
+      const now = context.currentTime;
+      source.buffer = createNoise(duration + 0.2);
+      filter.type = "bandpass";
+      filter.frequency.setValueAtTime(430, now);
+      filter.frequency.exponentialRampToValueAtTime(820, now + duration * 0.55);
+      filter.frequency.exponentialRampToValueAtTime(380, now + duration);
+      filter.Q.value = 0.7;
+      breathGain.gain.setValueAtTime(0.0001, now);
+      breathGain.gain.exponentialRampToValueAtTime(0.026, now + duration * 0.42);
+      breathGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      source.connect(filter);
+      filter.connect(breathGain);
+      breathGain.connect(master);
+      source.start(now);
+      source.stop(now + duration + 0.05);
+    };
+
+    const playVocal = (kind: "om" | "hum") => {
+      const now = context.currentTime;
+      const duration = kind === "om" ? 10.6 : 5.8;
+      const fundamental = kind === "om" ? 108 : 116;
+      const startFormants = kind === "om" ? [430, 820, 2650] : [245, 1120, 2050];
+      const endFormants = kind === "om" ? [245, 1120, 2050] : [220, 930, 1840];
+      const vocalBus = context.createGain();
+      const warmth = context.createBiquadFilter();
+      const vibrato = context.createOscillator();
+      const vibratoDepth = context.createGain();
+      vocalBus.gain.setValueAtTime(0.0001, now);
+      vocalBus.gain.exponentialRampToValueAtTime(kind === "om" ? 0.05 : 0.045, now + 0.85);
+      vocalBus.gain.setValueAtTime(kind === "om" ? 0.05 : 0.045, now + duration - 1.5);
+      vocalBus.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      warmth.type = "lowpass";
+      warmth.frequency.value = 3300;
+      warmth.Q.value = 0.45;
+      vocalBus.connect(warmth);
+      warmth.connect(master);
+      vibrato.frequency.value = kind === "om" ? 4.6 : 5.1;
+      vibratoDepth.gain.value = 1.7;
+      vibrato.connect(vibratoDepth);
+      vibrato.start(now);
+      vibrato.stop(now + duration + 0.05);
+
+      [1, 2, 3].forEach((harmonic, harmonicIndex) => {
+        const voice = context.createOscillator();
+        voice.type = harmonicIndex === 0 ? "sawtooth" : "triangle";
+        voice.frequency.value = fundamental * harmonic;
+        voice.detune.value = harmonicIndex === 1 ? 4 : harmonicIndex === 2 ? -6 : 0;
+        vibratoDepth.connect(voice.detune);
+        startFormants.forEach((formant, formantIndex) => {
+          const filter = context.createBiquadFilter();
+          const level = context.createGain();
+          filter.type = "bandpass";
+          filter.frequency.setValueAtTime(formant, now);
+          filter.frequency.exponentialRampToValueAtTime(endFormants[formantIndex], now + duration * 0.78);
+          filter.Q.value = [5, 7, 9][formantIndex];
+          level.gain.value = [0.9, 0.5, 0.22][formantIndex] / (harmonicIndex + 1);
+          voice.connect(filter);
+          filter.connect(level);
+          level.connect(vocalBus);
+        });
+        voice.start(now);
+        voice.stop(now + duration + 0.05);
+      });
+    };
+
+    const startDrone = (root: number) => {
+      const droneBus = context.createGain();
+      const filter = context.createBiquadFilter();
+      droneBus.gain.value = 0.018;
+      filter.type = "lowpass";
+      filter.frequency.value = 820;
+      filter.Q.value = 0.8;
+      droneBus.connect(filter);
+      filter.connect(master);
+      [1, 2, 3, 4.01].forEach((ratio, index) => {
+        const oscillator = context.createOscillator();
+        const level = context.createGain();
+        oscillator.type = index < 2 ? "sawtooth" : "triangle";
+        oscillator.frequency.value = root * ratio;
+        oscillator.detune.value = index % 2 ? -5 : 4;
+        level.gain.value = [0.55, 0.28, 0.12, 0.07][index];
+        oscillator.connect(level);
+        level.connect(droneBus);
+        oscillator.start();
+      });
+    };
+
+    const playPluck = (frequency: number, duration = 1.8) => {
+      const now = context.currentTime;
+      const oscillator = context.createOscillator();
+      const filter = context.createBiquadFilter();
+      const envelope = context.createGain();
+      oscillator.type = "triangle";
+      oscillator.frequency.setValueAtTime(frequency * 1.012, now);
+      oscillator.frequency.exponentialRampToValueAtTime(frequency, now + 0.08);
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(2400, now);
+      filter.frequency.exponentialRampToValueAtTime(620, now + duration);
+      filter.Q.value = 2.4;
+      envelope.gain.setValueAtTime(0.0001, now);
+      envelope.gain.exponentialRampToValueAtTime(0.055, now + 0.012);
+      envelope.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+      oscillator.connect(filter);
+      filter.connect(envelope);
+      envelope.connect(master);
+      oscillator.start(now);
+      oscillator.stop(now + duration + 0.05);
+    };
+
+    const playDrum = (deep: boolean) => {
+      const now = context.currentTime;
+      const body = context.createOscillator();
+      const bodyGain = context.createGain();
+      const hit = context.createBufferSource();
+      const hitFilter = context.createBiquadFilter();
+      const hitGain = context.createGain();
+      body.type = "sine";
+      body.frequency.setValueAtTime(deep ? 150 : 245, now);
+      body.frequency.exponentialRampToValueAtTime(deep ? 54 : 115, now + (deep ? 0.34 : 0.16));
+      bodyGain.gain.setValueAtTime(deep ? 0.08 : 0.045, now);
+      bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + (deep ? 0.5 : 0.24));
+      body.connect(bodyGain);
+      bodyGain.connect(master);
+      hit.buffer = createNoise(0.16);
+      hitFilter.type = "bandpass";
+      hitFilter.frequency.value = deep ? 720 : 1900;
+      hitFilter.Q.value = deep ? 0.8 : 1.6;
+      hitGain.gain.setValueAtTime(deep ? 0.018 : 0.026, now);
+      hitGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.13);
+      hit.connect(hitFilter);
+      hitFilter.connect(hitGain);
+      hitGain.connect(master);
+      body.start(now);
+      body.stop(now + 0.55);
+      hit.start(now);
+    };
+
+    if (practice.sound === "omVoice") {
+      const chant = () => playVocal("om");
+      chant();
+      timers.push(window.setInterval(chant, 13800));
+    } else if (practice.sound === "soHum") {
+      const cycle = () => {
+        playBreath(3.6);
+        timers.push(window.setTimeout(() => playVocal("hum"), 3900));
+      };
+      cycle();
+      timers.push(window.setInterval(cycle, 10400));
+    } else if (practice.sound === "kirtan") {
+      startDrone(65.4);
+      let beat = 0;
+      const harmonium = () => playResonance(130.8, [1, 1.25, 1.5, 2], 4.7, 0.016, "sawtooth", 0.42);
+      const tabla = () => {
+        playDrum(beat % 4 === 0);
+        beat += 1;
+      };
+      harmonium();
+      tabla();
+      timers.push(window.setInterval(harmonium, 5200));
+      timers.push(window.setInterval(tabla, 720));
+    } else if (practice.sound === "arabic") {
+      const scale = [1, 1.059, 1.26, 1.414, 1.498, 1.682, 1.888, 1.498];
+      let note = 0;
+      const oud = () => {
+        playPluck(146.8 * scale[note % scale.length]);
+        if (note % 4 === 0) playDrum(true);
+        note += 1;
+      };
+      oud();
+      timers.push(window.setInterval(oud, 980));
+    } else if (practice.sound === "bells") {
+      let bell = 0;
+      const ring = () => {
+        const notes = [164.8, 196, 220];
+        playResonance(notes[bell % notes.length], [1, 2, 2.41, 3, 4.16, 5.43], 8.2, 0.035, "sine", 0.018);
+        bell += 1;
+      };
+      ring();
+      timers.push(window.setInterval(ring, 9400));
+    } else if (practice.sound === "bowl") {
+      const bowl = () => {
+        playResonance(174, [1, 2.01, 2.72, 3.87, 5.18], 8.6, 0.04, "sine", 0.025);
+        playResonance(910, [1, 1.51], 0.32, 0.018, "triangle", 0.006);
+      };
+      bowl();
+      timers.push(window.setInterval(bowl, 9800));
+    } else {
+      const source = context.createBufferSource();
+      const filter = context.createBiquadFilter();
+      const ambience = context.createGain();
+      const movement = context.createOscillator();
+      const movementDepth = context.createGain();
+      source.buffer = createNoise(5, true);
+      source.loop = true;
+      filter.type = "lowpass";
+      filter.frequency.value = 760;
+      filter.Q.value = 0.35;
+      ambience.gain.value = 0.016;
+      movement.frequency.value = 0.065;
+      movementDepth.gain.value = 0.006;
+      source.connect(filter);
+      filter.connect(ambience);
+      ambience.connect(master);
+      movement.connect(movementDepth);
+      movementDepth.connect(ambience.gain);
+      source.start();
+      movement.start();
     }
+    audio.current = { context, master, timers };
   };
+
   useEffect(() => {
-    const localPlace = localStorage.getItem("bloom-favorite-place");
-    api<Memory[]>("/memories").then((items) => {
-      const remembered = items
-        .filter((item) => item.tag === "Preference" && /place|view|vision|beach|forest|mountain|space|sky|rain|ocean/i.test(`${item.title || ""} ${item.text}`))
-        .map((item) => item.text.trim());
-      setPlaceSuggestions(Array.from(new Set([...(localPlace ? [localPlace] : []), ...remembered])).slice(0, 4));
-    }).catch(() => setPlaceSuggestions(localPlace ? [localPlace] : []));
-  }, []);
-  const activeName = customVision || scenes[scene].name;
-  const activeDetail = customVision ? "Your personal remembered place" : scenes[scene].detail;
+    if (!running) return;
+    const timer = window.setInterval(() => {
+      setRemaining((value) => {
+        if (value <= 1) {
+          setRunning(false);
+          return 0;
+        }
+        return value - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [running]);
+
+  useEffect(() => {
+    if (!running) stopTone();
+  }, [running]);
+
+  useEffect(() => () => stopTone(), []);
+
+  const choosePractice = (id: string) => {
+    stopTone();
+    setRunning(false);
+    setPracticeId(id);
+    setRemaining(minutes * 60);
+  };
+
+  const chooseDuration = (value: number) => {
+    stopTone();
+    setRunning(false);
+    setMinutes(value);
+    setRemaining(value * 60);
+  };
+
+  const toggleSession = () => {
+    if (running) {
+      stopTone();
+      setRunning(false);
+      return;
+    }
+    if (remaining === 0) setRemaining(totalSeconds);
+    if (soundOn) startTone();
+    setRunning(true);
+  };
+
+  const toggleSound = () => {
+    if (soundOn) stopTone();
+    else if (running) startTone();
+    setSoundOn((value) => !value);
+  };
+
   return (
-    <div className={full ? "spacePage fullscreen" : "page innerPage spacePage"}>
+    <div className="page innerPage meditationPage">
       <div className="pageIntro">
         <div>
-          <span className="eyebrow">
-            <Orbit /> Visual escape
-          </span>
-          <h2>Choose somewhere impossible.</h2>
-          <p>
-            Full-screen places designed for awe, stillness, and a softer gaze.
-          </p>
+          <span className="eyebrow"><Moon /> Personal meditation</span>
+          <h2>Find stillness in your own way.</h2>
+          <p>Choose a practice that respects your beliefs, or use the silent non-religious option.</p>
         </div>
       </div>
-      <section
-        className={`spacePhoto animatedScene scene-${scene} ${customVision ? "customVision" : ""}`}
-      >
-        {generatedVideo && <video className="generatedSpaceVideo" src={generatedVideo} autoPlay loop muted playsInline onError={() => { setGeneratedVideo(""); setVideoState("failed"); setVisionMessage("The generated video could not be loaded. Your animated preview is playing instead."); }} />}
-        <div
-          className="spaceBackdrop"
-          key={scenes[scene].name}
-          style={{ backgroundImage: `url(${scenes[scene].image})` }}
-        />
-        <div className="spaceShade" />
-        <div className="movingStars" aria-hidden="true">
-          {Array.from({ length: 20 }, (_, index) => <i key={index} />)}
-        </div>
-        <div className="sceneMotion" aria-hidden="true"><i /><i /><i /></div>
-        <div className="visionLoop" aria-label="90 second looping vision"><span /><b>1:30 seamless loop</b></div>
+      <div className="meditationGrid">
+        <section className="card meditationChoices" aria-label="Meditation practices">
+          <div className="meditationChoiceHead"><b>Choose a practice</b><span>{meditationPractices.length} options</span></div>
+          {meditationPractices.map((item) => (
+            <button className={practiceId === item.id ? "active" : ""} onClick={() => choosePractice(item.id)} key={item.id}>
+              <span>{item.title}</span>
+              <small>{item.tradition}</small>
+            </button>
+          ))}
+        </section>
+        <section
+          className="card meditationSession"
+          data-practice={practice.id}
+          style={{ "--meditation-a": practice.colors[0], "--meditation-b": practice.colors[1], "--meditation-progress": `${progress}%` } as React.CSSProperties}
+        >
+          <span className="meditationSymbol" aria-hidden="true">{practice.symbol}</span>
+          <div className="meditationSessionHead">
+            <div><span>{practice.tradition}</span><h3>{practice.title}</h3></div>
+            <button className={soundOn ? "meditationSound active" : "meditationSound"} onClick={toggleSound} aria-pressed={soundOn}><Ear /> {soundOn ? practice.soundLabel : "Sound off"}</button>
+          </div>
+          <div className={`meditationOrb ${running ? phase.kind : "ready"}`}>
+            <div>
+              <small>{remaining === 0 ? "SESSION COMPLETE" : running ? phase.label.toUpperCase() : "WHEN YOU ARE READY"}</small>
+              <strong>{remaining === 0 ? "Well done" : running ? phase.label : practice.phrase}</strong>
+              <span>{remaining === 0 ? "Take a moment before moving on." : running ? phase.cue : practice.meaning}</span>
+              <b>{timeLabel}</b>
+            </div>
+          </div>
+          <div className="meditationDifference">
+            <div><span>Focus</span><b>{practice.focus}</b></div>
+            <div><span>Method</span><b>{practice.method}</b></div>
+          </div>
+          <div className="meditationDurations" aria-label="Meditation duration">
+            {[2, 5, 10, 15].map((value) => <button className={minutes === value ? "selected" : ""} onClick={() => chooseDuration(value)} key={value}>{value} min</button>)}
+          </div>
+          <div className="meditationActions">
+            <button className="primary" onClick={toggleSession}>{running ? <><Pause /> Pause</> : <><Play /> {remaining === 0 ? "Begin again" : "Begin meditation"}</>}</button>
+            <button className="softButton" onClick={() => { stopTone(); setRunning(false); setRemaining(totalSeconds); }}><TimerReset /> Reset</button>
+          </div>
+          <p className="meditationPracticeNote">{practice.note}</p>
+        </section>
+      </div>
+      <section className="card meditationGuide">
+        <div><span>1</span><p><b>Get comfortable</b><small>Sit or lie down somewhere safe. Relax your jaw and shoulders.</small></p></div>
+        <div><span>2</span><p><b>Follow gently</b><small>Use the visual cue and your own voice, silently or aloud.</small></p></div>
+        <div><span>3</span><p><b>Stop when needed</b><small>Return to normal breathing if you feel uncomfortable.</small></p></div>
+      </section>
+      <p className="meditationRespect"><ShieldCheck /> Bloom keeps traditions separate and offers them for personal reflection, not as religious instruction. Choose only what aligns with your beliefs.</p>
+    </div>
+  );
+}
+
+function Space() {
+  const [full, setFull] = useState(false);
+  const mountRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const mount = mountRef.current;
+    if (!mount) return;
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.5));
+    renderer.setSize(mount.clientWidth, mount.clientHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = .88;
+    mount.appendChild(renderer.domElement);
+    const world = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(72, mount.clientWidth / mount.clientHeight, .1, 20);
+    const geometry = new THREE.SphereGeometry(7, 96, 64);
+    const panoramaTexture = new THREE.TextureLoader().load(cosmicEarthPanorama);
+    panoramaTexture.colorSpace = THREE.SRGBColorSpace;
+    panoramaTexture.wrapS = THREE.RepeatWrapping;
+    panoramaTexture.minFilter = THREE.LinearMipmapLinearFilter;
+    panoramaTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const material = new THREE.ShaderMaterial({side:THREE.BackSide,toneMapped:false,uniforms:{uMap:{value:panoramaTexture},uTime:{value:0}},vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,fragmentShader:`precision highp float;varying vec2 vUv;uniform sampler2D uMap;uniform float uTime;void main(){vec2 uv=vUv;float earth=1.-smoothstep(.26,.43,uv.y);float nebula=smoothstep(.34,.72,uv.y);uv.x+=earth*(uTime*.00011+sin(uv.y*85.+uTime*.045)*.00032);uv.x+=nebula*sin(uv.y*21.+uTime*.018)*.00018;uv.y+=nebula*sin(uv.x*17.-uTime*.014)*.00012;vec3 col=texture2D(uMap,uv).rgb;col*=.96;gl_FragColor=vec4(col,1.);}`});
+    const sky = new THREE.Mesh(geometry, material);
+    world.add(sky);
+    world.add(new THREE.AmbientLight(0x556688, 1.7));
+    const cosmicLight = new THREE.PointLight(0xb88cff, 32, 16); cosmicLight.position.set(2, 2, 1); world.add(cosmicLight);
+
+    const particleCanvas=document.createElement("canvas");particleCanvas.width=128;particleCanvas.height=128;const particleContext=particleCanvas.getContext("2d")!;const particleGlow=particleContext.createRadialGradient(64,64,0,64,64,64);particleGlow.addColorStop(0,"rgba(255,255,255,1)");particleGlow.addColorStop(.12,"rgba(210,235,255,.95)");particleGlow.addColorStop(.42,"rgba(125,165,255,.28)");particleGlow.addColorStop(1,"rgba(0,0,0,0)");particleContext.fillStyle=particleGlow;particleContext.fillRect(0,0,128,128);const particleTexture=new THREE.CanvasTexture(particleCanvas);
+    const dustGeometry = new THREE.BufferGeometry();
+    const dustCount = 1400; const dustPositions = new Float32Array(dustCount * 3); const dustColors = new Float32Array(dustCount * 3);
+    const dustPalette = [new THREE.Color("#87ffe0"),new THREE.Color("#c090ff"),new THREE.Color("#ffbd65"),new THREE.Color("#9ec8ff")];
+    for(let i=0;i<dustCount;i++){const radius=1.3+Math.random()*4.9,theta=Math.random()*Math.PI*2,phi=Math.acos(2*Math.random()-1),o=i*3;dustPositions[o]=radius*Math.sin(phi)*Math.cos(theta);dustPositions[o+1]=radius*Math.cos(phi);dustPositions[o+2]=radius*Math.sin(phi)*Math.sin(theta);const c=dustPalette[i%dustPalette.length];dustColors[o]=c.r;dustColors[o+1]=c.g;dustColors[o+2]=c.b;}
+    dustGeometry.setAttribute("position",new THREE.BufferAttribute(dustPositions,3)); dustGeometry.setAttribute("color",new THREE.BufferAttribute(dustColors,3));
+    const dustMaterial = new THREE.PointsMaterial({size:.034,map:particleTexture,alphaMap:particleTexture,vertexColors:true,transparent:true,opacity:.52,blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true});
+    const cosmicDust = new THREE.Points(dustGeometry,dustMaterial); world.add(cosmicDust);
+
+    const asteroidGeometry = new THREE.IcosahedronGeometry(.075,2);const asteroidPoints=asteroidGeometry.attributes.position;const asteroidVector=new THREE.Vector3();for(let i=0;i<asteroidPoints.count;i++){asteroidVector.fromBufferAttribute(asteroidPoints,i);asteroidVector.multiplyScalar(.78+Math.random()*.38);asteroidPoints.setXYZ(i,asteroidVector.x,asteroidVector.y,asteroidVector.z);}asteroidGeometry.computeVertexNormals(); const asteroidMaterial = new THREE.MeshStandardMaterial({color:0x302d34,roughness:1,metalness:.02});
+    const asteroids = new THREE.InstancedMesh(asteroidGeometry,asteroidMaterial,22); const dummy=new THREE.Object3D(); const asteroidData:Array<{speed:number;radius:number;phase:number;y:number;scale:number}> = [];
+    for(let i=0;i<22;i++){const data={speed:.012+Math.random()*.026,radius:2.1+Math.random()*3.8,phase:Math.random()*Math.PI*2,y:-2.5+Math.random()*5,scale:.5+Math.random()*2.8};asteroidData.push(data);dummy.position.set(Math.cos(data.phase)*data.radius,data.y,Math.sin(data.phase)*data.radius);dummy.scale.setScalar(data.scale);dummy.rotation.set(Math.random()*3,Math.random()*3,0);dummy.updateMatrix();asteroids.setMatrixAt(i,dummy.matrix);} world.add(asteroids);
+
+
+    const cometCanvas=document.createElement("canvas");cometCanvas.width=512;cometCanvas.height=64;const cometContext=cometCanvas.getContext("2d")!;const tail=cometContext.createLinearGradient(25,0,512,0);tail.addColorStop(0,"rgba(235,250,255,.95)");tail.addColorStop(.12,"rgba(160,215,255,.7)");tail.addColorStop(1,"rgba(80,130,255,0)");cometContext.fillStyle=tail;cometContext.beginPath();cometContext.moveTo(26,22);cometContext.lineTo(508,31);cometContext.lineTo(26,42);cometContext.closePath();cometContext.fill();const head=cometContext.createRadialGradient(25,32,0,25,32,24);head.addColorStop(0,"#fff");head.addColorStop(.18,"rgba(200,235,255,.95)");head.addColorStop(1,"rgba(120,175,255,0)");cometContext.fillStyle=head;cometContext.fillRect(0,7,52,50);const cometTexture=new THREE.CanvasTexture(cometCanvas);const cometData=Array.from({length:7},(_,i)=>{const cometMaterial=new THREE.SpriteMaterial({map:cometTexture,transparent:true,opacity:.42+Math.random()*.4,blending:THREE.AdditiveBlending,depthWrite:false,rotation:-.05-Math.random()*.18});const sprite=new THREE.Sprite(cometMaterial);const scale=.55+Math.random()*1.15;sprite.scale.set(scale,.07+scale*.055,1);const data={sprite,x:-5+Math.random()*10,y:-2.8+Math.random()*5.6,z:-5.4+Math.random()*10.8,speed:.012+Math.random()*.034,delay:i*.7+Math.random()*4};sprite.position.set(data.x,data.y,data.z);world.add(sprite);return data;});
+
+    const composer = new EffectComposer(renderer); composer.addPass(new RenderPass(world,camera)); const bloom=new UnrealBloomPass(new THREE.Vector2(mount.clientWidth,mount.clientHeight),.38,.48,.68); composer.addPass(bloom);
+    let yaw = 0, pitch = 0, targetYaw = 0, targetPitch = 0, fov = 72, dragging = false, lastX = 0, lastY = 0;
+    const down = (event: PointerEvent) => { dragging = true; lastX = event.clientX; lastY = event.clientY; renderer.domElement.setPointerCapture(event.pointerId); };
+    const move = (event: PointerEvent) => { if (!dragging) return; targetYaw -= (event.clientX-lastX)*.0045; targetPitch -= (event.clientY-lastY)*.0045; targetPitch=Math.max(-1.15,Math.min(1.15,targetPitch)); lastX=event.clientX; lastY=event.clientY; };
+    const up = () => { dragging = false; };
+    const wheel = (event: WheelEvent) => { event.preventDefault(); fov=Math.max(42,Math.min(88,fov+event.deltaY*.025)); camera.fov=fov; camera.updateProjectionMatrix(); };
+    renderer.domElement.addEventListener("pointerdown", down); renderer.domElement.addEventListener("pointermove", move); renderer.domElement.addEventListener("pointerup", up); renderer.domElement.addEventListener("pointercancel", up); renderer.domElement.addEventListener("wheel",wheel,{passive:false});
+    const resize = () => { if(!mount.clientWidth||!mount.clientHeight)return; camera.aspect=mount.clientWidth/mount.clientHeight;camera.updateProjectionMatrix();renderer.setSize(mount.clientWidth,mount.clientHeight);composer.setSize(mount.clientWidth,mount.clientHeight); };
+    const observer = new ResizeObserver(resize); observer.observe(mount);
+    const clock = new THREE.Clock(); let frame = 0;
+    const animate = () => { frame=requestAnimationFrame(animate); const elapsed=clock.getElapsedTime();material.uniforms.uTime.value=elapsed;sky.rotation.y=elapsed*.0013;if(!dragging) targetYaw+=.00026; yaw+=(targetYaw-yaw)*.07; pitch+=(targetPitch-pitch)*.07; camera.rotation.set(pitch,yaw,0,"YXZ"); cosmicDust.rotation.y=elapsed*.006; cosmicDust.rotation.x=Math.sin(elapsed*.05)*.04; asteroidData.forEach((a,i)=>{const angle=a.phase+elapsed*a.speed;dummy.position.set(Math.cos(angle)*a.radius,a.y+Math.sin(elapsed*.17+a.phase)*.12,Math.sin(angle)*a.radius);dummy.scale.setScalar(a.scale);dummy.rotation.set(elapsed*a.speed*3+a.phase,elapsed*a.speed*2,angle);dummy.updateMatrix();asteroids.setMatrixAt(i,dummy.matrix);});asteroids.instanceMatrix.needsUpdate=true;cometData.forEach(c=>{if(elapsed<c.delay)return;c.x-=c.speed;if(c.x < -6){c.x=6;c.y=-2.8+Math.random()*5.6;c.z=-5.4+Math.random()*10.8;c.delay=elapsed+2+Math.random()*7;}c.sprite.position.set(c.x,c.y,c.z);});composer.render(); };
+    animate();
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); composer.dispose(); renderer.dispose(); geometry.dispose(); panoramaTexture.dispose(); material.dispose(); particleTexture.dispose();dustGeometry.dispose();dustMaterial.dispose();asteroidGeometry.dispose();asteroidMaterial.dispose();cometData.forEach(c=>c.sprite.material.dispose());cometTexture.dispose();renderer.domElement.remove(); };
+  }, []);
+  return (
+    <div className={full ? "spacePage fullscreen" : "page innerPage spacePage interactiveSpacePage"}>
+      {!full && <div className="pageIntro"><div><span className="eyebrow"><Orbit /> Immersive visual escape</span><h2>Drift through colour.</h2><p>One endless 3D space. Drag to look around and scroll to move closer.</p></div></div>}
+      <section className="spacePhoto interactiveSpace">
+        <div className="spaceCanvas" ref={mountRef} />
+        <div className="spaceVignette" />
+        <div className="visionLoop"><span /><b>Living universe</b></div>
         <button className="fullBtn" onClick={() => setFull(!full)}>
           {full ? <X /> : <Maximize2 />}
           {full ? " Exit" : " Full screen"}
         </button>
-        <div className="spaceCopy">
-          <small>{activeName}</small>
-          <h3>{activeDetail}</h3>
-          <p>Move slowly. There is nowhere else to be.</p>
-        </div>
+        <div className="spaceGuide"><b>Drag to roam</b><span>Scroll to zoom · move slowly</span></div>
       </section>
-      <section className="visionCreator card">
-        <div className="visionChatHead"><div className={videoState === "generating" ? "generating" : ""}><Sparkles /></div><span><b>{videoState === "generating" ? "Generating your AI video…" : videoState === "ready" ? "Your AI place is ready" : "Create your place"}</b><small>{visionMessage}</small></span></div>
-        {placeSuggestions.length > 0 && <div className="visionSuggestions"><small>Remembered for you</small>{placeSuggestions.map((place) => <button type="button" onClick={() => void createVision(place)} key={place}>{place}</button>)}</div>}
-        <form onSubmit={(event) => { event.preventDefault(); void createVision(); }}>
-          <textarea value={visionPrompt} onChange={(event) => setVisionPrompt(event.target.value)} placeholder="Describe the place you want to see — for example: a quiet beach at purple sunset, gentle waves, palm trees moving in warm wind, and glowing stars…" />
-          <button className="primary" disabled={!visionPrompt.trim()}><Sparkles /> Create my 1:30 vision</button>
-        </form>
-        <small className="visionHint">Include the place, time of day, colours, weather, movement, and how you want it to feel.</small>
-      </section>
-      <div className="scenePicker">
-        {scenes.map((s, i) => (
-          <button
-            className={scene === i ? "selected" : ""}
-            onClick={() => { setScene(i); setCustomVision(""); setGeneratedVideo(""); setVideoState("idle"); }}
-            key={s.name}
-          >
-            <span
-              className="sceneThumb"
-              style={{ backgroundImage: `url(${s.image})` }}
-            />
-            <span>
-              <b>{s.name}</b>
-              <small>{s.detail}</small>
-            </span>
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -3081,6 +3613,8 @@ function Gratitude() {
   );
 }
 function SettingsPage() {
+  const { user } = useUser();
+  const { openUserProfile, signOut } = useClerk();
   type AppPalette = "sage" | "lavender" | "ocean" | "rose" | "sunset";
   const palettes: { id: AppPalette; name: string; detail: string; colors: string[] }[] = [
     { id: "sage", name: "Calm sage", detail: "Natural and grounded", colors: ["#476a5a", "#dce9df", "#f1ddcd"] },
@@ -3089,12 +3623,57 @@ function SettingsPage() {
     { id: "rose", name: "Warm rose", detail: "Soft and comforting", colors: ["#8a5865", "#f1dfe4", "#f3e5dc"] },
     { id: "sunset", name: "Golden sunset", detail: "Warm and uplifting", colors: ["#8a6535", "#f3e7cc", "#efd9c9"] },
   ];
-  const [dark, setDark] = useState(() => localStorage.getItem("bloom-dark-mode") === "true");
-  const [palette, setPalette] = useState<AppPalette>(() => (localStorage.getItem("bloom-app-palette") as AppPalette) || "sage");
+  const [dark, setDark] = useState(() => localStorage.getItem(userStorageKey("bloom-dark-mode")) === "true");
+  const [palette, setPalette] = useState<AppPalette>(() => (localStorage.getItem(userStorageKey("bloom-app-palette")) as AppPalette) || "sage");
+  const [privacyStatus, setPrivacyStatus] = useState("");
+  const [privacyBusy, setPrivacyBusy] = useState<"download" | "restore" | "delete" | null>(null);
+  const recoveryInput = useRef<HTMLInputElement>(null);
   const choosePalette = (next: AppPalette) => {
     setPalette(next);
-    localStorage.setItem("bloom-app-palette", next);
+    localStorage.setItem(userStorageKey("bloom-app-palette"), next);
     document.body.dataset.palette = next;
+  };
+  const downloadMyData = async () => {
+    setPrivacyBusy("download");
+    setPrivacyStatus("Preparing your private export…");
+    try {
+      const [profile, journal, memories, goals, gratitude] = await Promise.all([
+        api<BloomProfile>("/profile"), api<unknown[]>("/journal"), api<unknown[]>("/memories"),
+        api<unknown[]>("/goals"), api<unknown[]>("/gratitude"),
+      ]);
+      const data = { exportedAt: new Date().toISOString(), account: { id: user?.id, email: user?.primaryEmailAddress?.emailAddress }, profile, journal, memories, goals, groundingNotes: gratitude, preferences: { darkMode: dark, palette } };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url; link.download = `bloom-data-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+      setPrivacyStatus("Your Bloom data was downloaded.");
+    } catch { setPrivacyStatus("Bloom could not prepare your download. Please try again."); }
+    finally { setPrivacyBusy(null); }
+  };
+  const deleteMyAccount = async () => {
+    if (!window.confirm("Permanently delete your Bloom account, journal, memories, goals, and preferences? This cannot be undone.")) return;
+    if (window.prompt("Type DELETE to confirm permanent account deletion.") !== "DELETE") { setPrivacyStatus("Account deletion was cancelled."); return; }
+    setPrivacyBusy("delete"); setPrivacyStatus("Deleting your Bloom data…");
+    try {
+      await api<void>("/account", { method: "DELETE" });
+      Object.keys(localStorage).filter((key) => key.endsWith(`:${activeBloomUserId}`)).forEach((key) => localStorage.removeItem(key));
+      await user?.delete();
+      await signOut({ redirectUrl: "/" });
+    } catch { setPrivacyStatus("The account could not be deleted. Please try again or manage it from Active sessions."); setPrivacyBusy(null); }
+  };
+  const restoreMyData = async (file?: File) => {
+    if (!file) return;
+    setPrivacyBusy("restore"); setPrivacyStatus("Restoring your saved Bloom data…");
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text) as { format?: string };
+      if (payload.format !== "bloom-recovery-v1") throw new Error("invalid recovery file");
+      const restored = await api<{ journal: number; memories: number; goals: number; notes: number }>("/account/restore", { method: "POST", body: text });
+      setPrivacyStatus(`Restored ${restored.journal} journal entries, ${restored.memories} memories, ${restored.goals} goal, and ${restored.notes} notes. Refreshing Bloom…`);
+      window.setTimeout(() => window.location.reload(), 1400);
+    } catch { setPrivacyStatus("Bloom could not read that recovery file. Please choose the Bloom recovery JSON file."); }
+    finally { setPrivacyBusy(null); if (recoveryInput.current) recoveryInput.current.value = ""; }
   };
   return (
     <div className="page innerPage">
@@ -3111,7 +3690,7 @@ function SettingsPage() {
         </div>
       </div>
       <div className="settingsGrid">
-        <section className="card privacySettings">
+        <section className="card">
           <h3>Appearance</h3>
           <div className="settingRow">
             <div>
@@ -3123,7 +3702,7 @@ function SettingsPage() {
               onClick={() => {
                 const next = !dark;
                 setDark(next);
-                localStorage.setItem("bloom-dark-mode", String(next));
+                localStorage.setItem(userStorageKey("bloom-dark-mode"), String(next));
                 document.body.classList.toggle("dark", next);
               }}
             >
@@ -3156,17 +3735,22 @@ function SettingsPage() {
             </button>
           </div>
         </section>
-        <section className="card">
+        <section className="card privacySettings">
           <h3>Privacy</h3>
-          <button className="settingsLink">
-            Download my data <ChevronRight />
+          <button className="settingsLink" onClick={downloadMyData} disabled={privacyBusy !== null}>
+            {privacyBusy === "download" ? "Preparing download…" : "Download my data"} <ChevronRight />
           </button>
-          <button className="settingsLink">
+          <button className="settingsLink" onClick={() => recoveryInput.current?.click()} disabled={privacyBusy !== null}>
+            {privacyBusy === "restore" ? "Restoring my data…" : "Restore saved data"} <ChevronRight />
+          </button>
+          <input ref={recoveryInput} type="file" accept="application/json,.json" hidden onChange={(event) => restoreMyData(event.target.files?.[0])} />
+          <button className="settingsLink" onClick={() => openUserProfile()}>
             Manage active sessions <ChevronRight />
           </button>
-          <button className="settingsLink danger">
-            Delete my account <ChevronRight />
+          <button className="settingsLink danger" onClick={deleteMyAccount} disabled={privacyBusy !== null}>
+            {privacyBusy === "delete" ? "Deleting account…" : "Delete my account"} <ChevronRight />
           </button>
+          {privacyStatus && <p className="privacyStatus" role="status">{privacyStatus}</p>}
         </section>
       </div>
     </div>
@@ -3176,7 +3760,7 @@ function Welcome({ onDone }: { onDone: () => void }) {
   const [stage, setStage] = useState(0);
   const [mode, setMode] = useState<"signin" | "create">("signin");
   const [showPassword, setShowPassword] = useState(false);
-  const [name, setName] = useState("Jhanvi");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -3209,7 +3793,7 @@ function Welcome({ onDone }: { onDone: () => void }) {
     else {
       localStorage.setItem(
         "bloom-user",
-        JSON.stringify({ name: name || "Jhanvi", preferences: [] }),
+        JSON.stringify({ name: name || "Bloom user", preferences: [] }),
       );
       onDone();
     }
@@ -3376,7 +3960,7 @@ function Welcome({ onDone }: { onDone: () => void }) {
                   localStorage.setItem(
                     "bloom-user",
                     JSON.stringify({
-                      name: name || "Jhanvi",
+                      name: name || "Bloom user",
                       preferences: selected,
                     }),
                   );
@@ -3396,13 +3980,65 @@ function Welcome({ onDone }: { onDone: () => void }) {
     </div>
   );
 }
+function ProfileOnboarding({ initialName, onDone }: { initialName: string; onDone: (profile: BloomProfile) => void }) {
+  const [name, setName] = useState(initialName);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [avoid, setAvoid] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const options = ["Gentle rain", "Ocean sounds", "Nature", "Space visuals", "Warm colors", "Cool colors", "Music", "Coloring", "Games", "Breathing", "Encouragement", "Jokes"];
+  const save = async () => {
+    if (!name.trim()) { setError("Please tell Bloom what to call you."); return; }
+    if (!selected.length) { setError("Choose at least one thing you enjoy."); return; }
+    setSaving(true); setError("");
+    try {
+      const profile = await api<BloomProfile>("/profile", { method: "POST", body: JSON.stringify({ name: name.trim(), preferences: selected.join("|"), avoid: avoid.trim() }) });
+      onDone(profile);
+    } catch { setError("Bloom could not save your profile. Make sure the Java backend is running."); }
+    finally { setSaving(false); }
+  };
+  return <div className="profileOnboarding">
+    <section className="profileOnboardingCard">
+      <Logo />
+      <span className="eyebrow"><Sparkles /> Make Bloom yours</span>
+      <h1>Let’s shape your space.</h1>
+      <p>This is asked only once. Bloom uses it to choose calmer sounds, visuals, activities, and suggestions for you.</p>
+      <label>What should Bloom call you?<input value={name} maxLength={100} onChange={(event) => setName(event.target.value)} placeholder="Your name" /></label>
+      <div className="onboardingQuestion"><b>What do you naturally enjoy?</b><span>Pick as many as you like.</span></div>
+      <div className="preferenceChips">{options.map((option) => <button className={selected.includes(option) ? "selected" : ""} onClick={() => setSelected((items) => items.includes(option) ? items.filter((item) => item !== option) : [...items, option])} key={option}>{option}</button>)}</div>
+      <label>Anything Bloom should avoid?<textarea value={avoid} onChange={(event) => setAvoid(event.target.value)} placeholder="For example: loud sounds, bright colors, reminders..." /></label>
+      {error && <div className="formError">{error}</div>}
+      <button className="primary wide" disabled={saving} onClick={save}>{saving ? "Saving your space…" : "Create my Bloom space"} <ArrowUpRight /></button>
+      <small>Your profile and wellbeing data stay separated from every other Bloom account.</small>
+    </section>
+  </div>;
+}
 function App() {
+  const { user } = useUser();
+  activeBloomUserId = user?.id || "";
   const [view, setView] = useState<View>("Today");
   const [menu, setMenu] = useState(false);
+  const [profile, setProfile] = useState<BloomProfile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
   useEffect(() => {
-    document.body.classList.toggle("dark", localStorage.getItem("bloom-dark-mode") === "true");
-    document.body.dataset.palette = localStorage.getItem("bloom-app-palette") || "sage";
+    document.body.classList.toggle("nav-open", menu);
+    return () => document.body.classList.remove("nav-open");
+  }, [menu]);
+  useEffect(() => {
+    if (!user?.id) return;
+    activeBloomUserId = user.id;
+    activeBloomProfile = null;
+    setProfile(null);
+    setProfileLoading(true);
+    api<BloomProfile>("/profile").then((saved) => { activeBloomProfile = saved; setProfile(saved); }).catch(() => setProfile(null)).finally(() => setProfileLoading(false));
+  }, [user?.id]);
+  useEffect(() => {
+    document.body.classList.toggle("dark", localStorage.getItem(userStorageKey("bloom-dark-mode")) === "true");
+    document.body.dataset.palette = localStorage.getItem(userStorageKey("bloom-app-palette")) || "sage";
   }, []);
+  if (profileLoading || (profile?.userId && profile.userId !== user?.id)) return <div className="profileLoading"><Logo /><span>Preparing your private space…</span></div>;
+  if (!profile) return <ProfileOnboarding initialName={user?.firstName || user?.fullName || ""} onDone={(saved) => { activeBloomProfile = saved; setProfile(saved); }} />;
+  activeBloomProfile = profile;
   let content =
     view === "Today" ? (
       <Today setView={setView} />
@@ -3422,6 +4058,8 @@ function App() {
       <Timeline />
     ) : view === "Sounds" ? (
       null
+    ) : view === "Meditation" ? (
+      <Meditation />
     ) : view === "Mindful Breaks" || view === "Breathe" ? (
       <PlayRoom />
     ) : view === "Space" ? (
@@ -3435,12 +4073,18 @@ function App() {
     );
   return (
     <div className="app">
-      <Sidebar view={view} setView={setView} open={menu} setOpen={setMenu} />
+      <button
+        className={menu ? "navBackdrop open" : "navBackdrop"}
+        aria-label="Close navigation"
+        onClick={() => setMenu(false)}
+      />
+      <Sidebar view={view} setView={setView} open={menu} setOpen={setMenu} profileName={profile.name} />
       <main>
         <Header
           view={view === "Bloom" ? "Buddy" : view}
           onMenu={() => setMenu(true)}
           setView={setView}
+          name={profile.name}
         />
         <div hidden={view !== "Sounds"}><Sounds /></div>
         {content}

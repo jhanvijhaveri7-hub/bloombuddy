@@ -110,7 +110,27 @@ async function localApi<T>(path: string, options?: RequestInit): Promise<T> {
     writeLocal("profile", profile);
     return profile as T;
   }
-  if (path === "/buddy/status") return { aiConnected: false, mode: "limited-fallback" } as T;
+  if (path === "/buddy/status") return { aiConnected: false, mode: "on-device-support" } as T;
+  if (path === "/buddy/reply" && method === "POST") {
+    const message = String(body.message || "").trim();
+    const lower = message.toLowerCase();
+    const name = readLocal<BloomProfile | null>("profile", null)?.name || "there";
+    let reply = `I’m here with you, ${name}. Tell me a little more about what is sitting heaviest on your mind right now.`;
+    if (/suicid|kill myself|end my life|hurt myself|self harm|don.?t want to live/.test(lower)) {
+      reply = `I’m really glad you told me, ${name}. You deserve immediate human support right now. Please move away from anything you could use to hurt yourself, contact local emergency services or a crisis line, and tell a trusted person who can stay with you. Are you in immediate danger right now?`;
+    } else if (/very low|sad|lonely|empty|cry|depress|hopeless|down/.test(lower)) {
+      reply = `I’m sorry it feels this heavy, ${name}. You don’t have to solve everything right now. Let’s make the next moment smaller: place both feet down, take one slow breath, and tell me—did something happen today, or has this feeling been building for a while?`;
+    } else if (/anxious|worried|panic|stress|overthink|nervous/.test(lower)) {
+      reply = `That sounds exhausting, ${name}. For this moment, look around and name one thing you can see and one sensation you can feel. What is the main thought your mind keeps returning to?`;
+    } else if (/angry|annoyed|irritated|frustrated|mad/.test(lower)) {
+      reply = `It makes sense that you’re stirred up, ${name}. You can say it plainly here—what happened, and what part of it felt most unfair or frustrating?`;
+    } else if (/tired|sleepy|exhausted|drained|burnt out|burned out/.test(lower)) {
+      reply = `You sound worn out, ${name}. Before pushing yourself further, what would help most: a short rest, getting something off your mind, or choosing one tiny task and leaving the rest for later?`;
+    } else if (/happy|great|excited|proud|amazing|good news|won/.test(lower)) {
+      reply = `I’m glad you shared that, ${name}. Let’s let the good moment land—what part of it are you happiest or proudest about?`;
+    }
+    return { reply } as T;
+  }
   if (path === "/space/video/status") return { configured: false, provider: "none" } as T;
   if (path === "/account" && method === "DELETE") {
     ["profile", "journal", "memories", "goals", "gratitude"].forEach((name) => localStorage.removeItem(localCollection(name)));
